@@ -1,37 +1,65 @@
-# Argo CD Installation Guide on Kubernetes
+# Argo CD Installation Guide
 
-## Overview
-
-This guide explains how to install **Argo CD** on a Kubernetes cluster, expose the Argo CD UI using a **LoadBalancer**, install the **Argo CD CLI**, and retrieve the initial administrator password.
+This guide walks you through installing **Argo CD** on a Kubernetes cluster, exposing the Argo CD Web UI, installing the Argo CD CLI, and logging in for the first time.
 
 ---
 
-# What is Argo CD?
+# Table of Contents
+
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Architecture](#architecture)
+- [Step 1: Create the Namespace](#step-1-create-the-namespace)
+- [Step 2: Install Argo CD](#step-2-install-argo-cd)
+- [Step 3: Verify the Installation](#step-3-verify-the-installation)
+- [Step 4: Expose the Argo CD Server](#step-4-expose-the-argo-cd-server)
+- [Step 5: Install the Argo CD CLI](#step-5-install-the-argo-cd-cli)
+- [Step 6: Retrieve the Initial Admin Password](#step-6-retrieve-the-initial-admin-password)
+- [Step 7: Login to Argo CD](#step-7-login-to-argo-cd)
+- [Useful Commands](#useful-commands)
+- [Troubleshooting](#troubleshooting)
+- [Cleanup](#cleanup)
+
+---
+
+# Overview
 
 Argo CD is a **GitOps Continuous Delivery** tool for Kubernetes.
 
-Instead of manually deploying applications using `kubectl apply`, Argo CD continuously monitors a Git repository and ensures your Kubernetes cluster matches the desired state stored in Git.
+Instead of manually deploying applications using `kubectl apply`, Argo CD continuously compares the desired state stored in a Git repository with the actual state of your Kubernetes cluster.
 
-### Benefits
+If any differences (configuration drift) are detected, Argo CD can:
+
+- Automatically synchronize changes
+- Notify users of drift
+- Roll back to previous versions
+- Provide deployment history
+- Visualize application health
+
+## Key Features
 
 - GitOps-based deployments
 - Automated synchronization
+- Self-healing applications
 - Rollback support
-- Drift detection
 - Multi-cluster management
-- Web UI and CLI support
-- RBAC integration
+- Web UI
+- CLI
+- RBAC support
+- SSO integration
 
 ---
 
 # Prerequisites
 
-Before starting, ensure you have:
+Before installing Argo CD, ensure you have the following:
 
-- Kubernetes Cluster (EKS, AKS, GKE, Minikube, Kind, etc.)
-- `kubectl` configured to access the cluster
-- Internet access to download manifests
-- Cluster administrator permissions
+| Requirement | Description |
+|------------|-------------|
+| Kubernetes Cluster | EKS, AKS, GKE, OpenShift, Minikube, Kind, etc. |
+| kubectl | Configured to communicate with the cluster |
+| Cluster Admin Access | Required for installation |
+| Internet Access | Required to download the installation manifests |
 
 Verify cluster connectivity:
 
@@ -43,14 +71,42 @@ Expected output:
 
 ```text
 NAME            STATUS   ROLES    AGE
-ip-10-0-0-15    Ready    <none>   2d
+worker-node-1   Ready    <none>   12d
+worker-node-2   Ready    <none>   12d
 ```
 
 ---
 
-# Step 1: Create the Argo CD Namespace
+# Architecture
 
-Namespaces help isolate Kubernetes resources.
+```
+                 Git Repository
+                        │
+                        │
+              Watches Git Repository
+                        │
+                        ▼
+                +----------------+
+                |    Repo Server |
+                +----------------+
+                        │
+                        ▼
+              +----------------------+
+              | Application Controller|
+              +----------------------+
+                        │
+                        ▼
+               Kubernetes API Server
+                        │
+                        ▼
+              Kubernetes Resources
+```
+
+---
+
+# Step 1: Create the Namespace
+
+Namespaces logically separate Kubernetes resources.
 
 Create a dedicated namespace for Argo CD.
 
@@ -61,14 +117,14 @@ kubectl create namespace argocd
 Verify:
 
 ```bash
-kubectl get ns
+kubectl get namespace argocd
 ```
 
-Expected:
+Expected output:
 
 ```text
-NAME       STATUS
-argocd     Active
+NAME      STATUS   AGE
+argocd    Active   15s
 ```
 
 ---
@@ -84,22 +140,32 @@ kubectl apply -n argocd \
 
 This command installs:
 
+- Custom Resource Definitions (CRDs)
 - Argo CD API Server
+- Repository Server
 - Application Controller
-- Repo Server
 - Redis
-- Dex (Authentication)
+- Dex Authentication Server
 - Notifications Controller
-- CRDs
-- RBAC resources
+- RBAC Resources
+- Service Accounts
+- Services
+- ConfigMaps
+- Secrets
 
-Verify pods:
+Installation usually completes within 1–3 minutes depending on the cluster.
+
+---
+
+# Step 3: Verify the Installation
+
+Verify that all pods are running.
 
 ```bash
 kubectl get pods -n argocd
 ```
 
-Example output:
+Example:
 
 ```text
 NAME                                      READY   STATUS
@@ -111,23 +177,27 @@ argocd-repo-server                        1/1     Running
 argocd-server                             1/1     Running
 ```
 
-Wait until every pod reaches the **Running** state.
+If any pod is not in the `Running` state, inspect it using:
+
+```bash
+kubectl describe pod <pod-name> -n argocd
+```
 
 ---
 
-# Step 3: Expose the Argo CD Server
+# Step 4: Expose the Argo CD Server
 
-By default, the Argo CD server uses a ClusterIP service, making it accessible only within the cluster.
+By default, the Argo CD API server is exposed as a **ClusterIP** service, meaning it is only accessible from within the Kubernetes cluster.
 
-Change the service type to **LoadBalancer** so it becomes accessible externally.
+To access the Argo CD Web UI externally, change the service type to **LoadBalancer**.
 
 ```bash
 kubectl patch svc argocd-server \
 -n argocd \
--p '{"spec": {"type": "LoadBalancer"}}'
+-p '{"spec":{"type":"LoadBalancer"}}'
 ```
 
-Verify:
+Verify the service:
 
 ```bash
 kubectl get svc -n argocd
@@ -136,23 +206,21 @@ kubectl get svc -n argocd
 Example:
 
 ```text
-NAME            TYPE           CLUSTER-IP      EXTERNAL-IP
-argocd-server   LoadBalancer   10.100.25.10    a1b2c3.elb.amazonaws.com
+NAME             TYPE           EXTERNAL-IP
+argocd-server    LoadBalancer   a12345.elb.amazonaws.com
 ```
 
-If your cloud provider supports LoadBalancers (AWS, Azure, GCP), an external IP or DNS name will be assigned automatically.
-
-Open:
+Open the following URL in your browser:
 
 ```
 https://<EXTERNAL-IP>
 ```
 
-> **Note:** The browser may display a certificate warning because Argo CD uses a self-signed certificate by default.
+> **Note:** The browser may display a security warning because Argo CD uses a self-signed TLS certificate by default. This is expected for a fresh installation.
 
 ---
 
-# Step 4: Install the Argo CD CLI
+# Step 5: Install the Argo CD CLI
 
 Download the latest CLI binary.
 
@@ -161,7 +229,7 @@ curl -sSL -o argocd-linux-amd64 \
 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
 ```
 
-Install it:
+Install the binary:
 
 ```bash
 sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
@@ -173,7 +241,7 @@ Remove the downloaded file:
 rm argocd-linux-amd64
 ```
 
-Verify installation:
+Verify the installation:
 
 ```bash
 argocd version
@@ -182,14 +250,14 @@ argocd version
 Example:
 
 ```text
-argocd: v2.x.x
+argocd: v3.x.x
 ```
 
 ---
 
-# Step 5: Retrieve the Initial Admin Password
+# Step 6: Retrieve the Initial Admin Password
 
-Argo CD stores the initial admin password in a Kubernetes Secret.
+During installation, Argo CD creates an initial administrator password and stores it in a Kubernetes Secret.
 
 Retrieve it using:
 
@@ -197,29 +265,40 @@ Retrieve it using:
 argocd admin initial-password -n argocd
 ```
 
-Example:
+Alternatively, you can retrieve it directly from the Kubernetes Secret:
 
-```text
-7Df84jkP9mnR
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret \
+-o jsonpath="{.data.password}" | base64 -d && echo
 ```
 
-Username:
+Default username:
 
 ```text
 admin
 ```
 
-Password:
+---
 
-```text
-<output-from-command>
+# Step 7: Login to Argo CD
+
+## Login Using the Web UI
+
+Navigate to:
+
 ```
+https://<LOADBALANCER-IP>
+```
+
+Use:
+
+| Username | Password |
+|-----------|----------|
+| admin | Initial password retrieved above |
 
 ---
 
-# Step 6: Login Using the CLI
-
-Replace the server address with your LoadBalancer DNS or IP.
+## Login Using the CLI
 
 ```bash
 argocd login <LOADBALANCER-IP>
@@ -228,66 +307,60 @@ argocd login <LOADBALANCER-IP>
 Example:
 
 ```bash
-argocd login a1b2c3.elb.amazonaws.com
+argocd login a12345.elb.amazonaws.com
 ```
 
-Enter:
+If you are using the default self-signed certificate, you may need to skip certificate verification during the initial login:
 
-```text
-Username: admin
-Password: <initial-password>
+```bash
+argocd login <LOADBALANCER-IP> --insecure
 ```
 
 ---
 
-# Step 7: Login Using the Web UI
+# Useful Commands
 
-Open:
-
-```
-https://<LOADBALANCER-IP>
-```
-
-Login with:
-
-| Field | Value |
-|--------|-------|
-| Username | admin |
-| Password | Initial password |
-
----
-
-# Verify the Installation
-
-Check all pods:
+## View Pods
 
 ```bash
 kubectl get pods -n argocd
 ```
 
-Check services:
+## View Services
 
 ```bash
 kubectl get svc -n argocd
 ```
 
-Check deployments:
+## View Deployments
 
 ```bash
-kubectl get deploy -n argocd
+kubectl get deployment -n argocd
 ```
 
-Check namespace resources:
+## View All Resources
 
 ```bash
 kubectl get all -n argocd
 ```
 
+## Check Logs
+
+```bash
+kubectl logs deployment/argocd-server -n argocd
+```
+
+## Restart the Argo CD Server
+
+```bash
+kubectl rollout restart deployment argocd-server -n argocd
+```
+
 ---
 
-# Common Troubleshooting
+# Troubleshooting
 
-## Pods Not Running
+## Pods Are Not Running
 
 Check pod status:
 
@@ -295,7 +368,7 @@ Check pod status:
 kubectl get pods -n argocd
 ```
 
-Describe a pod:
+Describe the pod:
 
 ```bash
 kubectl describe pod <pod-name> -n argocd
@@ -309,25 +382,29 @@ kubectl logs <pod-name> -n argocd
 
 ---
 
-## External IP Pending
+## External IP Is Pending
 
-If the LoadBalancer remains in the `Pending` state:
+If the `EXTERNAL-IP` remains in the `Pending` state:
 
-- Verify that your Kubernetes cluster supports LoadBalancer services.
-- On cloud providers (AWS, Azure, GCP), ensure the cloud controller manager is configured correctly.
-- On local clusters (Minikube, Kind), consider using `kubectl port-forward` or installing MetalLB.
+- Verify your Kubernetes cluster supports `LoadBalancer` services.
+- Ensure your cloud provider's load balancer integration is enabled.
+- For local clusters (Kind, Minikube), use `kubectl port-forward` or install MetalLB.
 
 ---
 
-## Cannot Access UI
+## Cannot Access the UI
 
-Check the service:
+Check that the service has an external IP:
 
 ```bash
 kubectl get svc -n argocd
 ```
 
-Ensure the security groups or firewall rules allow HTTPS traffic (port 443).
+Ensure:
+
+- Port **443** is open in your firewall or security group.
+- DNS resolves correctly if using a hostname.
+- The Argo CD server pod is healthy.
 
 ---
 
@@ -339,86 +416,25 @@ Retrieve it again:
 argocd admin initial-password -n argocd
 ```
 
-Or inspect the secret:
-
-```bash
-kubectl get secret argocd-initial-admin-secret \
--n argocd \
--o jsonpath="{.data.password}" | base64 -d
-```
+Or reset the admin password by following the official Argo CD documentation.
 
 ---
 
-# Useful Commands
+# Cleanup
 
-Check pods:
-
-```bash
-kubectl get pods -n argocd
-```
-
-Check services:
-
-```bash
-kubectl get svc -n argocd
-```
-
-View logs:
-
-```bash
-kubectl logs -n argocd deployment/argocd-server
-```
-
-Restart the server:
-
-```bash
-kubectl rollout restart deployment argocd-server -n argocd
-```
-
-Restart all deployments:
-
-```bash
-kubectl rollout restart deployment -n argocd
-```
-
----
-
-# Architecture
-
-```text
-                 Git Repository
-                       │
-                       ▼
-                Argo CD Repo Server
-                       │
-                       ▼
-              Application Controller
-                       │
-                       ▼
-               Kubernetes API Server
-                       │
-                       ▼
-               Kubernetes Cluster
-                       │
-                       ▼
-          Pods / Services / Deployments
-```
-
----
-
-# Cleanup (Optional)
-
-Delete Argo CD completely:
+To remove Argo CD from the cluster:
 
 ```bash
 kubectl delete namespace argocd
 ```
 
+This deletes all Argo CD resources, including deployments, services, secrets, and CRDs within the namespace.
+
 ---
 
 # References
 
-- Argo CD Official Documentation: https://argo-cd.readthedocs.io/
+- Official Documentation: https://argo-cd.readthedocs.io/
 - GitHub Repository: https://github.com/argoproj/argo-cd
 
 ---
@@ -429,9 +445,8 @@ kubectl delete namespace argocd
 |------|-------------|
 | 1 | Create the `argocd` namespace |
 | 2 | Install Argo CD using the official manifests |
-| 3 | Expose the Argo CD server as a `LoadBalancer` |
-| 4 | Install the Argo CD CLI |
-| 5 | Retrieve the initial admin password |
-| 6 | Log in using the CLI |
-| 7 | Access the Argo CD Web UI |
-| 8 | Verify the installation and begin managing applications with GitOps |
+| 3 | Verify all Argo CD components are running |
+| 4 | Expose the Argo CD server via a `LoadBalancer` |
+| 5 | Install the Argo CD CLI |
+| 6 | Retrieve the initial administrator password |
+| 7 | Log in to the Argo CD Web UI or CLI |
