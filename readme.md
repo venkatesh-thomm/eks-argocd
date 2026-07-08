@@ -1,4 +1,4 @@
-#### Argo CD Repository Structure (App of Apps Pattern)
+# Argo CD Repository Structure (App of Apps Pattern)
 
 
 
