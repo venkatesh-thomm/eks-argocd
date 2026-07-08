@@ -1,8 +1,6 @@
 #### Argo CD Repository Structure (App of Apps Pattern)
 
-This document explains the repository structure used in this project and how Argo CD deploys applications using the **App of Apps** pattern.
 
----
 
 # Repository Structure
 
