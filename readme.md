@@ -2,7 +2,7 @@
 
 
 
-# Repository Structure
+**Repository Structure**
 
 ```text
 eks-argocd/
@@ -36,7 +36,7 @@ eks-argocd/
 
 ---
 
-# Repository Flow
+**Repository Flow**
 
 The deployment starts from a single file called **app-of-apps.yaml**.
 
@@ -64,7 +64,7 @@ The deployment starts from a single file called **app-of-apps.yaml**.
 
 ---
 
-# 1. app-of-apps.yaml
+**1. app-of-apps.yaml**
 
 This is the **Parent Application**.
 
@@ -92,7 +92,7 @@ Once this application is created, Argo CD automatically discovers every applicat
 
 ---
 
-# 2. applications/
+**2. applications/**
 
 The `applications/` directory contains **child Argo CD Application resources**.
 
@@ -116,7 +116,7 @@ Think of this directory as an **index of applications**.
 
 ---
 
-# namespace.yaml
+**namespace.yaml**
 
 Purpose:
 
@@ -141,7 +141,7 @@ This application creates Kubernetes namespaces such as:
 
 ---
 
-# roboshop.yaml
+**roboshop.yaml**
 
 Purpose:
 
@@ -164,7 +164,7 @@ The directory contains application resources such as:
 
 ---
 
-# storage-classes.yaml
+**storage-classes.yaml**
 
 Purpose:
 
@@ -183,7 +183,7 @@ Typical resources include:
 
 ---
 
-# 3. namespaces/
+**3. namespaces/**
 
 This directory contains standard Kubernetes Namespace manifests.
 
@@ -222,7 +222,7 @@ Nothing else is deployed from this directory.
 
 ---
 
-# 4. roboshop/
+**4. roboshop/**
 
 This directory contains the actual application manifests.
 
@@ -261,7 +261,7 @@ These manifests create Kubernetes resources such as:
 
 ---
 
-# 5. storage-classes/
+**5. storage-classes/**
 
 Contains Kubernetes StorageClass resources.
 
@@ -277,11 +277,11 @@ These StorageClasses are later used by PersistentVolumeClaims (PVCs).
 
 ---
 
-# Why Separate These Directories?
+**Why Separate These Directories?**
 
 Separating infrastructure from applications improves readability and maintainability.
 
-## Infrastructure
+**Infrastructure**
 
 ```text
 Namespaces
@@ -297,7 +297,7 @@ Infrastructure changes infrequently.
 
 ---
 
-## Applications
+**Applications**
 
 ```text
 Deployments
@@ -317,7 +317,7 @@ Keeping them separate makes management easier.
 
 ---
 
-# Deployment Order
+**Deployment Order**
 
 The deployment follows this sequence:
 
@@ -369,7 +369,7 @@ Namespaces        Storage Classes
 
 ---
 
-# Why Create Namespaces First?
+**Why Create Namespaces First?**
 
 Applications are deployed into namespaces.
 
@@ -394,7 +394,7 @@ This is why namespace creation is separated into its own application.
 
 ---
 
-# Why Create Storage Classes First?
+**Why Create Storage Classes First?**
 
 PersistentVolumeClaims depend on StorageClasses.
 
@@ -414,7 +414,7 @@ If the StorageClass is missing, PVCs remain in the **Pending** state.
 
 ---
 
-# Advantages of the App of Apps Pattern
+**Advantages of the App of Apps Pattern**
 
 - Single entry point (`app-of-apps.yaml`)
 - Easy to manage multiple applications
@@ -426,7 +426,7 @@ If the StorageClass is missing, PVCs remain in the **Pending** state.
 
 ---
 
-# Summary
+**Summary**
 
 | Directory | Purpose |
 |----------|---------|
@@ -441,7 +441,7 @@ If the StorageClass is missing, PVCs remain in the **Pending** state.
 
 ---
 
-# Overall Workflow
+**Overall Workflow**
 
 ```text
 Developer
@@ -467,5 +467,3 @@ Deploy Applications
       ▼
 Kubernetes Cluster
 ```
-
-This architecture follows the **App of Apps** pattern, which is a widely adopted GitOps approach for managing multiple Kubernetes applications and infrastructure components using Argo CD.
