@@ -1,8 +1,5 @@
 #### Operations, Troubleshooting, Best Practices & Cheat Sheet
 
-This section covers day-to-day Argo CD operations, troubleshooting techniques, security recommendations, and commonly used commands.
-
----
 
 # Deleting an Application
 
